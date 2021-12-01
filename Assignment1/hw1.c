@@ -5,6 +5,10 @@
  * Student Name: ARAL SEN
  * ITU Number : 150170217
  *
+ *
+ * The following commands can be used to compile and run the program:
+ * $ gcc hw1.c -o hw1 -pthread -w
+ * $ time ./hw1
  */
 
 #include <pthread.h>
@@ -12,14 +16,14 @@
 #include <stdlib.h>
 
 
-// size of integer array
+// size of integer array 1000000
 #define SIZE 1000000
 
-/* change number of threads 1, 10, 100, 1000, 100000, and 20000 */
-#define N 100
+/* change number of threads 1, 10, 100, 1000, 100000, and 200000 */
+#define N 1000
  	
-// unsorted array 
-int array[SIZE];
+// unsorted array
+long int array[SIZE];
 
 void *worker_thread(void *arg)		
 {
@@ -27,17 +31,17 @@ void *worker_thread(void *arg)
 	//printf("This is worker_thread #%d\n", id); // this line can be uncommented to see the id of the thread
 
 	/* find index_of_interval_start */
-    int index_of_interval_start = id * (SIZE / N);
+    long int index_of_interval_start = id * (SIZE / N);
 
 
 	/* find index_of_interval_finish */
-    int index_of_interval_finish = (id + 1) * (SIZE / N);
+    long int index_of_interval_finish = (id + 1) * (SIZE / N);
 
 
 	/* find the maximal element in the interval */
-    int max = 0;
+    long int max = array[0];
 
-    for (int i = index_of_interval_start; i < index_of_interval_finish; i++) {
+    for (long int i = index_of_interval_start; i < index_of_interval_finish; i++) {
         if (array[i] > max)
             max = array[i];
     }
@@ -51,7 +55,7 @@ int main()
     pthread_t threads[N];
 
 	/* define an array to store all maximal elements obtained from each threads */
-    int maxElementsArray[N];
+    long int maxElementsArray[N];
 
 	// this creates an unsorted array with random elements
 	// do not change
@@ -62,29 +66,30 @@ int main()
 	}
 
 	/* create N threads */
-    for (i = 0; i < N; i++ ) {
-        printf("main() : creating thread, %d\n", i);
-        pthread_create(&threads[i], NULL, worker_thread, (void *) i);
+    long int j = 0;
+    for (j = 0; j < N; j++) {
+        //printf("main() : creating thread, %d\n", i);
+        pthread_create(&threads[j], NULL, worker_thread, (void *) j);
     }
 
 	/* join threads and return value of each thread assigned to maxElementsArray[] with corresponding id of the thread */
-    int* ret;
+    long int* ret;
 
-    for (i = 0; i < N; i++ ) {
-        printf("main() : joining thread, %d\n", i);
-        pthread_join(threads[i], (void**)&ret);
-        maxElementsArray[i] = ret;
+    for (j = 0; j < N; j++ ) {
+        //printf("main() : joining thread, %d\n", i);
+        pthread_join(threads[j], (void**)&ret);
+        maxElementsArray[j] = (long) ret;
     }
 
 	/* find the maximum from maxElementsArray[] */
-    int max = 0;
+    long int max = maxElementsArray[0];
 
-    for (i = 0; i < N; i++) {
-        if (maxElementsArray[i] > max)
-            max = maxElementsArray[i];
+    for (j = 0; j < N; j++) {
+        if (maxElementsArray[j] > max)
+            max = maxElementsArray[j];
     }
 
-	printf("After threads joined, the found max value by parent is %d\n", max);
+    printf("After threads joined, the found max value by parent is %ld\n", max);
 
 	return 0;
 }

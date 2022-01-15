@@ -8,7 +8,7 @@
  *
  * The following commands can be used to compile and run the program:
  * $ gcc assignment2.c -o assignment2 -pthread -w
- * $ ./a.out 5 6
+ * $ ./assignment2 5 6
  */
 
 #include <unistd.h>
@@ -197,14 +197,14 @@ int main(__attribute__((unused)) int argc,char* argv[])
 
     int i;
     int randomValue;
-    void *tmp;
+    void *tmp = NULL;
 
     mutex = create_semaphore(1);
     hydroBonded = create_semaphore(0);
     oxyQueue = create_semaphore(0);
     hydroQueue = create_semaphore(0);
 
-    // create n+m threads random order..
+    // create n+m threads random order
     for (i = 0; i < thread_count; i++) {
         randomValue = rand() % 2; // this gives us 0 or 1
         if (n > 0 && m > 0) {
@@ -231,5 +231,5 @@ int main(__attribute__((unused)) int argc,char* argv[])
         }
     }
 
-    for(;;);
+    for(;;); // endless loop, "ctrl + c" to Interrupt (kill) the current foreground process running in the terminal
 }

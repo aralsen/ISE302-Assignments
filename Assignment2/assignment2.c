@@ -1,4 +1,3 @@
-#include <sys/cdefs.h>
 /*
  * ASSIGNMENT - 2
  * SOURCE CODE
@@ -29,8 +28,6 @@ typedef struct {
 int oxygen=0, hydrogen=0;
 
 Semaphore *mutex, *hydroBonded, *oxyQueue, *hydroQueue;
-
-Mutex* make_mutex(void);
 
 Mutex* make_mutex(void)
 {
@@ -118,9 +115,7 @@ void sem_signal(Semaphore *semaphore)
 
 int bond(void)
 {
-    static int i = 0;
-    i++;
-    if ((i%3) == 0) printf("** Molecule no. %d created**\n\n", i/3);
+    usleep(500000);
     return 0;
 }
 
@@ -133,6 +128,7 @@ _Noreturn void* oxyFn(void* arg)
     oxygen+=1;
     if (hydrogen >= 2)
     {
+        printf("Oxygen = %d: %d oxygen atoms and %d hydrogen atoms are waiting, so I signal the next oxygen and hydrogen atoms in the queue.\n", pthread_self(), oxygen, hydrogen);
         sem_signal(hydroQueue);
         sem_signal(hydroQueue);
         hydrogen-=2;
@@ -140,13 +136,15 @@ _Noreturn void* oxyFn(void* arg)
         oxygen-=1;
     }
     else {
+        printf("Oxygen = %d: No available hydrogen atoms, so I wait. There are other %d oxygen atoms and %d hydrogen atoms waiting.\n", pthread_self(), oxygen, hydrogen);
         sem_signal(mutex);
     }
     sem_wait(oxyQueue);
-    printf("oxygen bond\n");
-    bond();
+    printf("Oxygen %d: We are bonding together now.\n", pthread_self());
+    bond();  // usleep(500000)
     sem_wait(hydroBonded);
     sem_wait(hydroBonded);
+    printf("Oxygen %d: I have bounded with two hydrogen atoms, and become a water molecule.\n\n", pthread_self());
     sem_signal(mutex);
 }
 
@@ -159,6 +157,7 @@ _Noreturn void* hydroFn(void* arg)
     hydrogen +=1;
     if (hydrogen >= 2 && oxygen >= 1)
     {
+        printf("Hydrogen = %d: %d oxygen atoms and %d hydrogen atoms are waiting, so I signal the next oxygen and hydrogen atoms in the queue.\n", pthread_self(), oxygen, hydrogen);
         sem_signal(hydroQueue);
         sem_signal(hydroQueue);
         hydrogen-=2;
@@ -166,24 +165,26 @@ _Noreturn void* hydroFn(void* arg)
         oxygen-=1;
     }
     else {
+        printf("Hydrogen = %d: No available hydrogen or oxygen atoms, so I wait. There are other %d oxygen atoms and %d hydrogen atoms waiting.\n", pthread_self(), oxygen, hydrogen);
         sem_signal(mutex);
     }
     sem_wait(hydroQueue);
-    printf("hydrogen bond\n");
-    bond();
+    printf("Hydrogen %d: We are bonding together now.\n", pthread_self());
+    bond(); // usleep(500000)
     sem_signal(hydroBonded);
 }
 
 
 int main(__attribute__((unused)) int argc,char* argv[])
 {
-    int n = atoi(argv[1]); //number of oxygen atoms
-    int m = atoi(argv[2]); //number of hydrogen atoms
+    int n = atoi(argv[1]); // number of oxygen atoms
+    int m = atoi(argv[2]); // number of hydrogen atoms
 
     int thread_count = n + m;
+    pthread_t threads[thread_count]; // creating n+m threads
 
     int i;
-    pthread_t threads[thread_count];
+    int randomValue;
     void *arg;
 
     mutex = make_semaphore(1);
@@ -191,12 +192,31 @@ int main(__attribute__((unused)) int argc,char* argv[])
     oxyQueue = make_semaphore(0);
     hydroQueue = make_semaphore(0);
 
-    for (i = 0; i < n; i++) {
-        pthread_create(&threads[i], 0, oxyFn, arg);
-    }
-
-    for (i = n; i < thread_count; i++) {
-        pthread_create(&threads[i], 0, hydroFn, arg);
+    // create the threads random order..
+    for (i = 0; i < thread_count; i++) {
+        randomValue = rand() % 2; // this gives us 0 or 1
+        if (n > 0 && m > 0) {
+            if (randomValue) {  // if 1 -> create oxygen
+                n--;
+                pthread_create(&threads[i], 0, oxyFn, arg);
+            }
+            else {
+                m--;
+                pthread_create(&threads[i], 0, hydroFn, arg); // create hydrogen
+            }
+        }
+        else if (n > 0 && m == 0) {
+            n--;
+            pthread_create(&threads[i], 0, oxyFn, arg);
+        }
+        else if (m > 0 && n == 0) {
+            m--;
+            pthread_create(&threads[i], 0, hydroFn, arg);
+        }
+        else {
+            printf("error\n");
+            exit(-1);
+        }
     }
 
     for(;;);

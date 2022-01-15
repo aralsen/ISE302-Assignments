@@ -26,10 +26,9 @@ typedef struct {
     Cond *cond;
 } Semaphore;
 
-int oxygen=0, hydregen=0;
+int oxygen=0, hydrogen=0;
 
-Semaphore *mutex, *barrier, *oxyQueue, *hydroQueue;
-pthread_t oxyThread, hydroThread1, hydroThread2;
+Semaphore *mutex, *hydroBonded, *oxyQueue, *hydroQueue;
 
 Mutex* make_mutex(void);
 
@@ -41,7 +40,7 @@ Mutex* make_mutex(void)
     if (n != 0)
         perror("make_lock failed");
 
-    return(mutex);
+    return mutex;
 }
 
 void mutex_lock(Mutex *mutex)
@@ -65,7 +64,7 @@ Cond* make_cond(void)
     n= pthread_cond_init(cond, NULL);
     if (n != 0)
         perror("Make_cond failed");
-    return (cond);
+    return cond;
 }
 
 void cond_wait(Cond* cond, Mutex* mutex)
@@ -89,7 +88,7 @@ Semaphore* make_semaphore(int value)
     semaphore -> wakeup=0;
     semaphore -> mutex = make_mutex();
     semaphore -> cond = make_cond();
-    return (semaphore);
+    return semaphore;
 }
 
 void sem_wait(Semaphore *semaphore)
@@ -119,74 +118,86 @@ void sem_signal(Semaphore *semaphore)
 
 int bond(void)
 {
-    static  int i = 0;
+    static int i = 0;
     i++;
     if ((i%3) == 0) printf("** Molecule no. %d created**\n\n", i/3);
-    sleep(2);
-    return(0);
+    return 0;
 }
 
 _Noreturn void* oxyFn(void* arg)
 {
-    while (1) {
-        sem_wait(mutex);
-        oxygen+=1;
-        if (hydregen>=2)
-        {
-            sem_signal(hydroQueue);
-            sem_signal(hydroQueue);
-            hydregen-=2;
-            sem_signal(oxyQueue);
-            oxygen-=1;
-        }
-        else {
-            sem_signal(mutex);
-        }
-        sem_wait(oxyQueue);
-        printf("oxygen bond\n");
-        bond();
+    int num = (rand() % (1000000 - 250000 + 1)) + 250000;
+    usleep(num);
 
+    sem_wait(mutex);
+    oxygen+=1;
+    if (hydrogen >= 2)
+    {
+        sem_signal(hydroQueue);
+        sem_signal(hydroQueue);
+        hydrogen-=2;
+        sem_signal(oxyQueue);
+        oxygen-=1;
+    }
+    else {
         sem_signal(mutex);
     }
+    sem_wait(oxyQueue);
+    printf("oxygen bond\n");
+    bond();
+    sem_wait(hydroBonded);
+    sem_wait(hydroBonded);
+    sem_signal(mutex);
 }
 
 _Noreturn void* hydroFn(void* arg)
 {
-    while (1) {
-        sem_wait(mutex);
-        hydregen +=1;
-        if (hydregen>=2 && oxygen >= 1)
-        {
-            sem_signal(hydroQueue);
-            sem_signal(hydroQueue);
-            hydregen-=2;
-            sem_signal(oxyQueue);
-            oxygen-=1;
-        }
-        else {
-            sem_signal(mutex);
-        }
-        sem_wait(hydroQueue);
-        printf("hydregen bond\n");
-        bond();
+    int num = (rand() % (1000000 - 250000 + 1)) + 250000;
+    usleep(num);
+
+    sem_wait(mutex);
+    hydrogen +=1;
+    if (hydrogen >= 2 && oxygen >= 1)
+    {
+        sem_signal(hydroQueue);
+        sem_signal(hydroQueue);
+        hydrogen-=2;
+        sem_signal(oxyQueue);
+        oxygen-=1;
     }
+    else {
+        sem_signal(mutex);
+    }
+    sem_wait(hydroQueue);
+    printf("hydrogen bond\n");
+    bond();
+    sem_signal(hydroBonded);
 }
 
 
-main(__attribute__((unused)) int argc,char* argv[])
+int main(__attribute__((unused)) int argc,char* argv[])
 {
-//    int n = atoi(argv[1]); //number of oxygen atoms
-//    int m = atoi(argv[2]); //number of hydrogen atoms
+    int n = atoi(argv[1]); //number of oxygen atoms
+    int m = atoi(argv[2]); //number of hydrogen atoms
 
+    int thread_count = n + m;
+
+    int i;
+    pthread_t threads[thread_count];
     void *arg;
 
     mutex = make_semaphore(1);
-    barrier = make_semaphore(0);
+    hydroBonded = make_semaphore(0);
     oxyQueue = make_semaphore(0);
     hydroQueue = make_semaphore(0);
 
-    pthread_create(&oxyThread, NULL, oxyFn,arg);
-    pthread_create(&hydroThread1,NULL,hydroFn,arg);
-    pthread_create(&hydroThread2,NULL,hydroFn,arg);
+    for (i = 0; i < n; i++) {
+        pthread_create(&threads[i], 0, oxyFn, arg);
+    }
+
+    for (i = n; i < thread_count; i++) {
+        pthread_create(&threads[i], 0, hydroFn, arg);
+    }
+
     for(;;);
 }

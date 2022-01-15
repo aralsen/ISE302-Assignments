@@ -17,100 +17,113 @@
 #include <stdlib.h>
 
 typedef pthread_mutex_t Mutex;
-typedef pthread_cond_t Cond;
+typedef pthread_cond_t Condition;
+
+int oxygen = 0;
+int hydrogen = 0;
 
 typedef struct {
-    int value, wakeup;
+    int value;
+    int get_up;
     Mutex *mutex;
-    Cond *cond;
+    Condition *condition;
 } Semaphore;
-
-int oxygen=0, hydrogen=0;
 
 Semaphore *mutex, *hydroBonded, *oxyQueue, *hydroQueue;
 
-Mutex* make_mutex(void)
+Mutex* create_mutex(void)
 {
-    int n;
-    Mutex* mutex = (Mutex*)malloc(sizeof(Mutex));
-    n = pthread_mutex_init(mutex, NULL);
-    if (n != 0)
-        perror("make_lock failed");
+    Mutex* m_mutex = (Mutex*)malloc(sizeof(Mutex));
+    int err = pthread_mutex_init(m_mutex, NULL);
 
-    return mutex;
-}
-
-void mutex_lock(Mutex *mutex)
-{
-    int n= pthread_mutex_lock(mutex);
-    if (n != 0)
-        perror("lock failed");
-}
-
-void mutex_unlock(Mutex *mutex)
-{
-    int n= pthread_mutex_unlock(mutex);
-    if (n != 0)
-        perror("unlock failed");
-}
-
-Cond* make_cond(void)
-{
-    int n;
-    Cond* cond = (Cond*)malloc(sizeof(Cond));
-    n= pthread_cond_init(cond, NULL);
-    if (n != 0)
-        perror("Make_cond failed");
-    return cond;
-}
-
-void cond_wait(Cond* cond, Mutex* mutex)
-{
-    int n= pthread_cond_wait(cond,mutex);
-    if (n != 0)
-        perror("cond_wait failed");
-}
-
-void cond_signal(Cond* cond)
-{
-    int n= pthread_cond_signal(cond);
-    if (n != 0)
-        perror("cond_signal failed");
-}
-
-Semaphore* make_semaphore(int value)
-{
-    Semaphore *semaphore = (Semaphore*)malloc(sizeof(Semaphore));
-    semaphore -> value=value;
-    semaphore -> wakeup=0;
-    semaphore -> mutex = make_mutex();
-    semaphore -> cond = make_cond();
-    return semaphore;
-}
-
-void sem_wait(Semaphore *semaphore)
-{
-    mutex_lock(semaphore->mutex);
-    semaphore->value--;
-    if (semaphore-> value < 0) {
-        do {
-            cond_wait(semaphore->cond, semaphore->mutex);
-        } while (semaphore->wakeup < 1);
-        semaphore->wakeup--;
+    if (err != 0) {
+        perror("init error");
     }
-    mutex_unlock(semaphore->mutex);
+
+    return m_mutex;
 }
 
-void sem_signal(Semaphore *semaphore)
+void lock_mutex(Mutex *pMutex)
 {
-    mutex_lock(semaphore->mutex);
-    semaphore->value++;
-    if (semaphore->value <= 0)
+    int err = pthread_mutex_lock(pMutex);
+
+    if (err != 0) {
+        perror("lock_mutex error");
+    }
+}
+
+void unlock_mutex(Mutex *pMutex)
+{
+    int err = pthread_mutex_unlock(pMutex);
+
+    if (err != 0) {
+        perror("unlock_mutex error");
+    }
+}
+
+Condition* create_condition(void)
+{
+    Condition* condition = (Condition*)malloc(sizeof(Condition));
+    int err = pthread_cond_init(condition, NULL);
+
+    if (err != 0) {
+        perror("create_condition error");
+    }
+
+    return condition;
+}
+
+void signal_condition(Condition* cond)
+{
+    int err = pthread_cond_signal(cond);
+
+    if (err != 0) {
+        perror("signal_condition error");
+    }
+}
+
+void wait_condition(Condition* cond, Mutex* pMutex)
+{
+    int err = pthread_cond_wait(cond, pMutex);
+
+    if (err != 0) {
+        perror("wait_condition error");
+    }
+}
+
+Semaphore* create_semaphore(int val)
+{
+    Semaphore *sem = (Semaphore*)malloc(sizeof(Semaphore));
+    sem -> value = val;
+    sem -> get_up = 0;
+    sem -> mutex = create_mutex();
+    sem -> condition = create_condition();
+    return sem;
+}
+
+void signal_semaphore(Semaphore *sem)
+{
+    lock_mutex(sem->mutex);
+    sem -> value++;
+    if (sem -> value <= 0)
     {
-        semaphore->wakeup++;
-        cond_signal(semaphore->cond);
+        sem -> get_up++;
+        signal_condition(sem->condition);
     }
-    mutex_unlock(semaphore->mutex);
+    unlock_mutex(sem->mutex);
+}
+
+void wait_semaphore(Semaphore *sem)
+{
+    lock_mutex(sem->mutex);
+    sem -> value--;
+    if (sem -> value < 0) {
+        do {
+            wait_condition(sem->condition, sem->mutex);
+        } while (sem -> get_up < 1);
+        sem -> get_up--;
+    }
+    unlock_mutex(sem->mutex);
 }
 
 int bond(void)
@@ -119,61 +132,60 @@ int bond(void)
     return 0;
 }
 
-_Noreturn void* oxyFn(void* arg)
+_Noreturn void* oxygen_function(void* arg)
 {
-    int num = (rand() % (1000000 - 250000 + 1)) + 250000;
+    int num = (rand() % (1000000 - 250000 + 1)) + 250000;  // random number between [250000, 1000000]
     usleep(num);
 
-    sem_wait(mutex);
+    wait_semaphore(mutex);
     oxygen+=1;
     if (hydrogen >= 2)
     {
         printf("Oxygen = %d: %d oxygen atoms and %d hydrogen atoms are waiting, so I signal the next oxygen and hydrogen atoms in the queue.\n", pthread_self(), oxygen, hydrogen);
-        sem_signal(hydroQueue);
-        sem_signal(hydroQueue);
+        signal_semaphore(hydroQueue);
+        signal_semaphore(hydroQueue);
         hydrogen-=2;
-        sem_signal(oxyQueue);
+        signal_semaphore(oxyQueue);
         oxygen-=1;
     }
     else {
         printf("Oxygen = %d: No available hydrogen atoms, so I wait. There are other %d oxygen atoms and %d hydrogen atoms waiting.\n", pthread_self(), oxygen, hydrogen);
-        sem_signal(mutex);
+        signal_semaphore(mutex);
     }
-    sem_wait(oxyQueue);
+    wait_semaphore(oxyQueue);
     printf("Oxygen %d: We are bonding together now.\n", pthread_self());
     bond();  // usleep(500000)
-    sem_wait(hydroBonded);
-    sem_wait(hydroBonded);
+    wait_semaphore(hydroBonded);
+    wait_semaphore(hydroBonded);
     printf("Oxygen %d: I have bounded with two hydrogen atoms, and become a water molecule.\n\n", pthread_self());
-    sem_signal(mutex);
+    signal_semaphore(mutex);
 }
 
-_Noreturn void* hydroFn(void* arg)
+_Noreturn void* hydrogen_function(void* arg)
 {
-    int num = (rand() % (1000000 - 250000 + 1)) + 250000;
+    int num = (rand() % (1000000 - 250000 + 1)) + 250000; // // random number between [250000, 1000000]
     usleep(num);
 
-    sem_wait(mutex);
+    wait_semaphore(mutex);
     hydrogen +=1;
     if (hydrogen >= 2 && oxygen >= 1)
     {
         printf("Hydrogen = %d: %d oxygen atoms and %d hydrogen atoms are waiting, so I signal the next oxygen and hydrogen atoms in the queue.\n", pthread_self(), oxygen, hydrogen);
-        sem_signal(hydroQueue);
-        sem_signal(hydroQueue);
+        signal_semaphore(hydroQueue);
+        signal_semaphore(hydroQueue);
         hydrogen-=2;
-        sem_signal(oxyQueue);
+        signal_semaphore(oxyQueue);
         oxygen-=1;
     }
     else {
         printf("Hydrogen = %d: No available hydrogen or oxygen atoms, so I wait. There are other %d oxygen atoms and %d hydrogen atoms waiting.\n", pthread_self(), oxygen, hydrogen);
-        sem_signal(mutex);
+        signal_semaphore(mutex);
     }
-    sem_wait(hydroQueue);
+    wait_semaphore(hydroQueue);
     printf("Hydrogen %d: We are bonding together now.\n", pthread_self());
     bond(); // usleep(500000)
-    sem_signal(hydroBonded);
+    signal_semaphore(hydroBonded);
 }
-
 
 int main(__attribute__((unused)) int argc,char* argv[])
 {
@@ -185,33 +197,33 @@ int main(__attribute__((unused)) int argc,char* argv[])
 
     int i;
     int randomValue;
-    void *arg;
+    void *tmp;
 
-    mutex = make_semaphore(1);
-    hydroBonded = make_semaphore(0);
-    oxyQueue = make_semaphore(0);
-    hydroQueue = make_semaphore(0);
+    mutex = create_semaphore(1);
+    hydroBonded = create_semaphore(0);
+    oxyQueue = create_semaphore(0);
+    hydroQueue = create_semaphore(0);
 
-    // create the threads random order..
+    // create n+m threads random order..
     for (i = 0; i < thread_count; i++) {
         randomValue = rand() % 2; // this gives us 0 or 1
         if (n > 0 && m > 0) {
             if (randomValue) {  // if 1 -> create oxygen
                 n--;
-                pthread_create(&threads[i], 0, oxyFn, arg);
+                pthread_create(&threads[i], NULL, oxygen_function, tmp);
             }
             else {
                 m--;
-                pthread_create(&threads[i], 0, hydroFn, arg); // create hydrogen
+                pthread_create(&threads[i], NULL, hydrogen_function, tmp); // create hydrogen
             }
         }
         else if (n > 0 && m == 0) {
             n--;
-            pthread_create(&threads[i], 0, oxyFn, arg);
+            pthread_create(&threads[i], 0, oxygen_function, tmp);
         }
         else if (m > 0 && n == 0) {
             m--;
-            pthread_create(&threads[i], 0, hydroFn, arg);
+            pthread_create(&threads[i], 0, hydrogen_function, tmp);
         }
         else {
             printf("error\n");
